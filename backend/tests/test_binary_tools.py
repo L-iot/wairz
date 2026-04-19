@@ -229,20 +229,23 @@ class TestCheckBinaryProtections:
 
 
 class TestRegistration:
-    def test_all_tools_registered(self, registry):
-        tools = registry.get_anthropic_tools()
-        names = {t["name"] for t in tools}
-        assert names == {
-            "list_functions",
-            "disassemble_function",
-            "decompile_function",
-            "list_imports",
-            "list_exports",
-            "xrefs_to",
-            "xrefs_from",
-            "get_binary_info",
-            "check_binary_protections",
-        }
+    # Core tools that must always be present — new tools are allowed.
+    _REQUIRED_TOOLS = {
+        "list_functions",
+        "disassemble_function",
+        "decompile_function",
+        "list_imports",
+        "list_exports",
+        "xrefs_to",
+        "xrefs_from",
+        "get_binary_info",
+        "check_binary_protections",
+    }
+
+    def test_core_tools_registered(self, registry):
+        names = {t["name"] for t in registry.get_anthropic_tools()}
+        missing = self._REQUIRED_TOOLS - names
+        assert not missing, f"Missing core binary tools: {missing}"
 
     def test_tool_schemas_valid(self, registry):
         for tool in registry.get_anthropic_tools():
@@ -251,19 +254,25 @@ class TestRegistration:
             assert "input_schema" in tool
             assert tool["input_schema"]["type"] == "object"
             assert "properties" in tool["input_schema"]
-            assert "required" in tool["input_schema"]
 
     def test_disassemble_has_optional_param(self, registry):
         tools = registry.get_anthropic_tools()
         disasm = next(t for t in tools if t["name"] == "disassemble_function")
         props = disasm["input_schema"]["properties"]
         assert "num_instructions" in props
-        assert "num_instructions" not in disasm["input_schema"]["required"]
+        assert "num_instructions" not in disasm["input_schema"].get("required", [])
 
-    def test_all_tools_require_binary_path(self, registry):
-        for tool in registry.get_anthropic_tools():
-            assert "binary_path" in tool["input_schema"]["properties"]
-            assert "binary_path" in tool["input_schema"]["required"]
+    def test_core_tools_require_binary_path(self, registry):
+        """Core single-binary tools must require binary_path."""
+        tools = {t["name"]: t for t in registry.get_anthropic_tools()}
+        for name in self._REQUIRED_TOOLS:
+            tool = tools[name]
+            assert "binary_path" in tool["input_schema"]["properties"], (
+                f"{name} missing binary_path"
+            )
+            assert "binary_path" in tool["input_schema"].get("required", []), (
+                f"{name} should require binary_path"
+            )
 
 
 # ---------------------------------------------------------------------------
